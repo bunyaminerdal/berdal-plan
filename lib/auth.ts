@@ -1,9 +1,8 @@
+import { getUserByEmail, getUserById } from "@/services/auth";
 import bcrypt from "bcryptjs";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { prisma } from "./prisma";
 import { LoginSchema } from "./schemas";
-
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -18,9 +17,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (validatedFields.success) {
           const { email, password } = validatedFields.data;
 
-          const user = await prisma.user.findUnique({
-            where: { email: email },
-          });
+          const user = await getUserByEmail(email);
           if (!user || !user.password) return null;
 
           const passwordsMatch = await bcrypt.compare(password, user.password);
@@ -32,6 +29,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  debug: process.env.NODE_ENV === "development",
+  callbacks: {
+    async session({ token, session }) {
+      if (token.sub && session.user) {
+        session.user.id = token.sub;
+      }
+      if (token.sub) {
+        const user = await getUserById(token.sub);
+
+        if (user) session.user.role = user.role;
+      }
+
+      return session;
+    },
+  },
   session: { strategy: "jwt" },
   secret: process.env.AUTH_SECRET,
 });
